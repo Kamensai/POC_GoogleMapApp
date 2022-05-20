@@ -1,14 +1,11 @@
 package com.khamvongsa.victor.poc_googlemapapp;
 
 import android.Manifest;
-import android.content.Context;
+import android.annotation.SuppressLint;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.View;
-import android.widget.FrameLayout;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -19,7 +16,6 @@ import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
@@ -29,36 +25,43 @@ import com.google.android.libraries.places.api.model.PlaceLikelihood;
 import com.google.android.libraries.places.api.net.FindCurrentPlaceRequest;
 import com.google.android.libraries.places.api.net.FindCurrentPlaceResponse;
 import com.google.android.libraries.places.api.net.PlacesClient;
+import com.khamvongsa.victor.poc_googlemapapp.model.NearbyRestaurant;
+import com.khamvongsa.victor.poc_googlemapapp.utils.MapAPICalls;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-
-import static android.content.ContentValues.TAG;
-import static android.provider.SettingsSlicesContract.KEY_LOCATION;
+import io.reactivex.disposables.Disposable;
 
 
-public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback {
+public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback, MapAPICalls.Callbacks {
 
     private static final String TAG = MapsActivity.class.getSimpleName();
 
     private GoogleMap mMap;
-    // private String[] PERMISSIONS;
+    // PERMISSIONS
+    private final static int REQUEST_CODE_ASK_PERMISSIONS = 1;
+
+    private static final String[] REQUIRED_SDK_PERMISSIONS = new String[] {
+            Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.INTERNET, Manifest.permission.ACCESS_COARSE_LOCATION};
+
+
     private CameraPosition cameraPosition;
 
 
-    // A default location (Grenoble, France) and default zoom to use when location permission is
+    // A default location (saint Marcellin, France) and default zoom to use when location permission is
     // not granted.
-    private final LatLng defaultLocation = new LatLng(45.188529, 5.724524);
-    private static final int DEFAULT_ZOOM = 16;
+    private final LatLng defaultLocation = new LatLng(45.1542205811, 5.32068014145);
+    private static final int DEFAULT_ZOOM = 15;
     private static final int PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION = 1;
+    private static final int PERMISSIONS_REQUEST_INTERNET = 1;
+
     private boolean locationPermissionGranted;
 
     // The entry point to the Places API.
@@ -70,6 +73,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     // The geographical location where the device is currently located. That is, the last-known
     // location retrieved by the Fused Location Provider.
     private Location lastKnownLocation;
+    private LatLng mLatLngPosition;
 
     // Keys for storing activity state.
     // [START maps_current_place_state_keys]
@@ -83,6 +87,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private String[] likelyPlaceAddresses;
     private List[] likelyPlaceAttributions;
     private LatLng[] likelyPlaceLatLngs;
+
+    //FOR DATA
+    private Disposable disposable;
+
+    private NearbyRestaurant mNearbyRestaurant;
 
 
     @Override
@@ -149,9 +158,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
 
-        // [END map_current_place_set_info_window_adapter]
+        checkPermissions();
+
         // Prompt the user for permission.
-        getLocationPermission();
+        //getLocationPermission();
         // [END_EXCLUDE]
 
         // Turn on the My Location layer and the related control on the map.
@@ -160,7 +170,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         // Get the current location of the device and set the position of the map.
         getDeviceLocation();
 
-        showCurrentPlace();
+        //showCurrentPlace();
 
     }
 /*
@@ -183,50 +193,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
  */
 
-    // This function is called when the user accepts or decline the permission.
-    // Request Code is used to check which permission called this function.
-    // This request code is provided when the user is prompt for permission.
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode,
-                                           @NonNull String[] permissions,
-                                           @NonNull int[] grantResults)
-    {
-        locationPermissionGranted = false;
-        if (requestCode
-                == PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION) {// If request is cancelled, the result arrays are empty.
-            if (grantResults.length > 0
-                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                locationPermissionGranted = true;
-            }
-        } else {
-            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        }
-       /* super.onRequestPermissionsResult(requestCode,
-                permissions,
-                grantResults);
-        locationPermissionGranted = false;
-        if (requestCode == 1){
-
-            if(grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, "Location Permission Granted", Toast.LENGTH_SHORT) .show();
-                locationPermissionGranted = true;
-            }else {
-                Toast.makeText(this, "Location Permission Denied", Toast.LENGTH_SHORT) .show();
-            }
-
-            if (grantResults[1] == PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, "Storage Permission Granted", Toast.LENGTH_SHORT).show();
-
-            }  else {
-                Toast.makeText(this, "Storage Permission Denied", Toast.LENGTH_SHORT).show();
-            }
-        }
-
-        */
-        updateLocationUI();
-    }
-
+    @SuppressLint("MissingPermission")
     private void updateLocationUI() {
         if (mMap == null) {
             return;
@@ -239,7 +206,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 mMap.setMyLocationEnabled(false);
                 mMap.getUiSettings().setMyLocationButtonEnabled(false);
                 lastKnownLocation = null;
-                getLocationPermission();
+                checkPermissions();
             }
         } catch (SecurityException e)  {
             Log.e("Exception: %s", e.getMessage());
@@ -257,7 +224,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
          */
         try {
             if (locationPermissionGranted) {
-                Task<Location> locationResult = fusedLocationProviderClient.getLastLocation();
+                @SuppressLint("MissingPermission") Task<Location> locationResult = fusedLocationProviderClient.getLastLocation();
                 locationResult.addOnCompleteListener(this, new OnCompleteListener<Location>() {
                     @Override
                     public void onComplete(@NonNull Task<Location> task) {
@@ -268,6 +235,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                                 mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(
                                         new LatLng(lastKnownLocation.getLatitude(),
                                                 lastKnownLocation.getLongitude()), DEFAULT_ZOOM));
+                                executeHttpRequestWithRetrofit(lastKnownLocation);
                             }
                         } else {
                             Log.d(TAG, "Current location is null. Using defaults.");
@@ -284,6 +252,48 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
     }
     // [END maps_current_place_get_device_location]
+
+    protected void checkPermissions() {
+        final List<String> missingPermissions = new ArrayList<String>();
+        // check all required dynamic permissions
+        for (final String permission : REQUIRED_SDK_PERMISSIONS) {
+            final int result = ContextCompat.checkSelfPermission(this, permission);
+            if (result != PackageManager.PERMISSION_GRANTED) {
+                missingPermissions.add(permission);
+            }
+        }
+        if (!missingPermissions.isEmpty()) {
+            // request all missing permissions
+            final String[] permissions = missingPermissions
+                    .toArray(new String[missingPermissions.size()]);
+            ActivityCompat.requestPermissions(this, permissions, REQUEST_CODE_ASK_PERMISSIONS);
+        } else {
+            final int[] grantResults = new int[REQUIRED_SDK_PERMISSIONS.length];
+            Arrays.fill(grantResults, PackageManager.PERMISSION_GRANTED);
+            onRequestPermissionsResult(REQUEST_CODE_ASK_PERMISSIONS, REQUIRED_SDK_PERMISSIONS,
+                    grantResults);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_CODE_ASK_PERMISSIONS) {
+            for (int index = permissions.length - 1; index >= 0; --index) {
+                if (grantResults[index] != PackageManager.PERMISSION_GRANTED) {
+                    // exit the app if one permission is not granted
+                    Toast.makeText(this, "Required permission '" + permissions[index]
+                            + "' not granted, exiting", Toast.LENGTH_LONG).show();
+                    finish();
+                    return;
+                }
+            }
+            // all permissions were granted
+            locationPermissionGranted = true;
+        }
+        updateLocationUI();
+    }
 
     /**
      * Prompts the user for permission to use the device location.
@@ -397,6 +407,122 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             getLocationPermission();
         }
     }
-    // [END maps_current_place_show_current_place]
 
+    // 4 - Execute HTTP request and update UI
+    private void executeHttpRequestWithRetrofit(Location lastKnownLocation){
+        String location = lastKnownLocation.getLatitude() + "," + lastKnownLocation.getLongitude();
+        MapAPICalls.fetchNearbyRestaurant(this, location);
+    }
+
+    @Override
+    public void onResponse(@Nullable NearbyRestaurant nearbyRestaurants) {
+        // 2.1 - When getting response, we update UI
+        if (nearbyRestaurants != null){
+            Log.e(TAG, "getNearbyRestaurants succeeded");
+            this.updateNearbyRestaurantUI(nearbyRestaurants);
+        }
+    }
+
+    @Override
+    public void onFailure() {
+        // 2.2 - When getting error, we update UI
+        Log.e(TAG, "can't get API Places");
+    }
+
+    private void showRestaurant(List<NearbyRestaurant.PlaceResults> placeResults) {
+        mMap.clear();
+        int count = placeResults.size();
+        int i = 0;
+        likelyPlaceNames = new String[count];
+        likelyPlaceAddresses = new String[count];
+        likelyPlaceAttributions = new List[count];
+        likelyPlaceLatLngs = new LatLng[count];
+
+        for (NearbyRestaurant.PlaceResults r : placeResults) {
+            double lat = r.getGeometry().getLocation().getLat();
+            double lng = r.getGeometry().getLocation().getLng();
+            LatLng latLng = new LatLng(lat, lng);
+
+            likelyPlaceNames[i] = r.getName();
+            likelyPlaceAddresses[i] = r.getVicinity();
+            likelyPlaceLatLngs[i] = latLng;
+
+            mMap.addMarker(new MarkerOptions()
+                    .title(likelyPlaceNames[i])
+                    .position(likelyPlaceLatLngs[i])
+                    .snippet(likelyPlaceAddresses[i]));
+
+            i++;
+            if (i > (count - 1)) {
+                break;
+            }
+        }
+    }
+
+    private void updateNearbyRestaurantUI(NearbyRestaurant nearbyRestaurants) {
+        List<NearbyRestaurant.PlaceResults> mPlaceResults = nearbyRestaurants.getPlaceResults();
+        if (mPlaceResults.size() > 0) {
+            int count;
+            int i = 0;
+            if (mPlaceResults.size() <= M_MAX_ENTRIES) {
+                showRestaurant(mPlaceResults);
+            } else if (mPlaceResults.size() >= M_MAX_ENTRIES){
+                count = M_MAX_ENTRIES;
+                while (mPlaceResults.size() > (count+1)) {
+                    mPlaceResults.remove(i);
+                    i++;
+                }
+                showRestaurant(mPlaceResults);
+            }
+
+        } else {
+            Log.e(TAG, "Pas de Restaurant à proximité");
+            Toast.makeText(this, "Pas de Restaurant à proximité",Toast.LENGTH_LONG);
+        }
+    }
+
+
+    // This function is called when the user accepts or decline the permission.
+    // Request Code is used to check which permission called this function.
+    // This request code is provided when the user is prompt for permission.
+/*
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+                                           @NonNull String[] permissions,
+                                           @NonNull int[] grantResults)
+    {
+        locationPermissionGranted = false;
+        if (requestCode
+                == PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION) {// If request is cancelled, the result arrays are empty.
+            if (grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                locationPermissionGranted = true;
+            }
+        } else {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        }
+
+       /* super.onRequestPermissionsResult(requestCode,
+                permissions,
+                grantResults);
+        locationPermissionGranted = false;
+        if (requestCode == 1){
+
+            if(grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Location Permission Granted", Toast.LENGTH_SHORT) .show();
+                locationPermissionGranted = true;
+            }else {
+                Toast.makeText(this, "Location Permission Denied", Toast.LENGTH_SHORT) .show();
+            }
+
+            if (grantResults[1] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Storage Permission Granted", Toast.LENGTH_SHORT).show();
+
+            }  else {
+                Toast.makeText(this, "Storage Permission Denied", Toast.LENGTH_SHORT).show();
+            }
+        }
+        updateLocationUI();
+    }
+        */
 }
